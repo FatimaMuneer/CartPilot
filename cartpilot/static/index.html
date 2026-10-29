@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CartPilot – AI shopping agent with spending guardrails</title>
+<style>
+  :root{--bg:#0a1230;--card:#111c44;--line:#22306a;--txt:#eaf0ff;--mut:#9fb0dc;--blue:#009cde;--green:#2ecc71;--red:#ff5d6c;--amber:#ffb84d}
+  *{box-sizing:border-box} body{margin:0;font-family:system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--txt)}
+  header{padding:18px 28px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px}
+  header h1{margin:0;font-size:22px} header span{color:var(--mut);font-size:14px}
+  .badge{margin-left:auto;font-size:12px;padding:4px 10px;border-radius:99px;background:#1b2a63;color:var(--mut)}
+  main{display:grid;grid-template-columns:1.4fr 1fr;gap:20px;padding:20px 28px;max-width:1300px;margin:auto}
+  @media(max-width:900px){main{grid-template-columns:1fr}}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:20px}
+  .panel h2{margin:0 0 12px;font-size:16px}
+  .row{display:flex;gap:8px} input,select{background:#0c1740;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:10px;font-size:14px}
+  input[type=text]{flex:1} button{background:var(--blue);color:#fff;border:0;border-radius:8px;padding:10px 16px;font-weight:600;cursor:pointer}
+  button.ghost{background:transparent;border:1px solid var(--line);color:var(--txt)} button.red{background:var(--red)} button.green{background:var(--green);color:#052}
+  button:disabled{opacity:.5}
+  .reply{margin:14px 0;color:var(--mut)}
+  .cards{display:grid;gap:12px}
+  .pcard{display:flex;gap:14px;align-items:center;background:#0c1740;border:1px solid var(--line);border-radius:12px;padding:12px}
+  .pcard .em{font-size:34px} .pcard .info{flex:1} .pcard .t{font-weight:600} .pcard .d{color:var(--mut);font-size:13px;margin-top:2px}
+  .price{font-weight:700;font-size:18px;margin-right:8px}
+  .banner{border-radius:10px;padding:12px 14px;margin:12px 0;font-size:14px}
+  .banner.block{background:#3a1220;border:1px solid var(--red)} .banner.ask{background:#3a2c12;border:1px solid var(--amber)} .banner.ok{background:#10301f;border:1px solid var(--green)}
+  .bar{height:12px;background:#0c1740;border-radius:99px;overflow:hidden;margin:8px 0} .bar>div{height:100%;background:var(--blue)}
+  label{display:block;font-size:12px;color:var(--mut);margin:10px 0 4px} .rules input{width:100%}
+  .cats{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px} .cats label{display:flex;align-items:center;gap:4px;margin:0;background:#0c1740;padding:4px 8px;border-radius:99px;color:var(--txt)}
+  table{width:100%;border-collapse:collapse;font-size:13px} td,th{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+  .tag{padding:2px 8px;border-radius:99px;font-size:11px} .paid{background:#10301f;color:var(--green)} .blocked,.rejected{background:#3a1220;color:var(--red)} .awaiting_approval{background:#3a2c12;color:var(--amber)} .approved{background:#12304a;color:var(--blue)}
+  .log{max-height:220px;overflow:auto;font-family:ui-monospace,monospace;font-size:12px;color:var(--mut)} .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .chips button{font-size:12px;padding:6px 10px}
+</style>
+</head>
+<body>
+<header><h1>🛒 CartPilot</h1><span>AI shopping agent with spending guardrails</span><div class="badge" id="mode">loading…</div></header>
+<main>
+  <div>
+    <div class="panel">
+      <h2>1 · Ask the agent</h2>
+      <div class="row"><input type="text" id="msg" placeholder="e.g. A gift for my dad under $50, he loves coffee" value="A gift for my dad under $50, he loves coffee">
+      <button id="send">Ask</button></div>
+      <div class="chips"><button class="ghost" data-q="Wireless headphones">Wireless headphones</button>
+        <button class="ghost" data-q="Noise-cancelling headphones">Try a risky purchase ($299)</button>
+        <button class="ghost" data-q="Something for yoga under $40">Yoga under $40</button></div>
+      <div class="reply" id="reply"></div>
+      <div class="cards" id="cards"></div>
+    </div>
+    <div class="panel" id="actionPanel" style="display:none">
+      <h2>2 · Guardrail decision</h2>
+      <div id="decision"></div>
+      <div id="payArea"></div>
+    </div>
+  </div>
+  <div>
+    <div class="panel">
+      <h2>Budget</h2>
+      <div id="budgetText"></div><div class="bar"><div id="budgetBar" style="width:0"></div></div>
+    </div>
+    <div class="panel rules">
+      <h2>Your spending rules</h2>
+      <label>Monthly budget ($)</label><input type="number" id="r_budget" min="0">
+      <label>Max per purchase ($)</label><input type="number" id="r_max" min="0">
+      <label>Ask my approval above ($)</label><input type="number" id="r_appr" min="0">
+      <label>Allowed categories</label><div class="cats" id="r_cats"></div>
+      <div style="margin-top:12px"><button id="saveRules">Save rules</button></div>
+    </div>
+    <div class="panel"><h2>Purchase history</h2><table id="reqTable"></table></div>
+    <div class="panel"><h2>Audit trail</h2><div class="log" id="audit"></div></div>
+  </div>
+</main>
+<script>
+let CFG = {}, CURRENT = null, ppLoaded = false;
+const $ = id => document.getElementById(id);
+const api = (path, method='GET', body) => fetch(path, {method, headers:{'Content-Type':'application/json'}, body: body?JSON.stringify(body):undefined})
+  .then(async r => { const d = await r.json().catch(()=>({})); if(!r.ok) throw new Error(d.detail || r.statusText); return d; });
+const money = n => '$' + Number(n).toFixed(2);
+
+async function init(){
+  CFG = await api('/api/config');
+  $('mode').textContent = (CFG.mock_paypal ? 'Demo payments' : 'PayPal Sandbox') + (CFG.llm ? ' · LLM agent' : ' · basic agent');
+  $('r_cats').innerHTML = CFG.categories.map(c => `<label><input type="checkbox" value="${c}"> ${c}</label>`).join('');
+  await refresh();
+}
+
+async function refresh(){
+  const d = await api('/api/dashboard');
+  const r = d.rules;
+  $('r_budget').value = r.monthly_budget; $('r_max').value = r.max_per_purchase; $('r_appr').value = r.approval_threshold;
+  document.querySelectorAll('#r_cats input').forEach(i => i.checked = r.allowed_categories.includes(i.value));
+  const pct = Math.min(100, d.spent / r.monthly_budget * 100 || 0);
+  $('budgetText').innerHTML = `<b>${money(d.spent)}</b> spent of ${money(r.monthly_budget)} this month`;
+  $('budgetBar').style.width = pct + '%';
+  $('reqTable').innerHTML = '<tr><th>Item</th><th>Amount</th><th>Status</th></tr>' + (d.requests.map(q =>
+    `<tr><td>${q.title}</td><td>${money(q.amount)}</td><td><span class="tag ${q.status}">${q.status.replace('_',' ')}</span></td></tr>`).join('') || '<tr><td colspan=3>Nothing yet</td></tr>');
+  $('audit').innerHTML = d.audit.map(a => `${a.ts.slice(11)} · ${a.event}${a.detail ? ' ' + a.detail : ''}`).join('<br>') || 'No events yet';
+}
+
+$('saveRules').onclick = async () => {
+  await api('/api/rules', 'PUT', {monthly_budget:+$('r_budget').value, max_per_purchase:+$('r_max').value, approval_threshold:+$('r_appr').value,
+    allowed_categories:[...document.querySelectorAll('#r_cats input:checked')].map(i=>i.value)});
+  refresh();
+};
+
+async function ask(){
+  const text = $('msg').value.trim(); if(!text) return;
+  $('send').disabled = true; $('reply').textContent = 'Thinking…'; $('cards').innerHTML = '';
+  try {
+    const r = await api('/api/agent', 'POST', {message:text});
+    $('reply').textContent = r.reply;
+    $('cards').innerHTML = r.products.map(p => `<div class="pcard"><div class="em">${p.emoji||'🛍️'}</div>
+      <div class="info"><div class="t">${p.title}</div><div class="d">${p.reason||p.description}</div></div>
+      <div class="price">${money(p.price)}</div><button data-id="${p.id}">Buy</button></div>`).join('');
+    $('cards').querySelectorAll('button').forEach(b => b.onclick = () => requestPurchase(b.dataset.id));
+  } catch(e){ $('reply').textContent = 'Error: ' + e.message; }
+  $('send').disabled = false; refresh();
+}
+$('send').onclick = ask; $('msg').onkeydown = e => { if(e.key==='Enter') ask(); };
+document.querySelectorAll('.chips button').forEach(b => b.onclick = () => { $('msg').value = b.dataset.q; ask(); });
+
+async function requestPurchase(pid){
+  const q = await api('/api/purchase-request', 'POST', {product_id: pid});
+  CURRENT = q; showDecision(q); refresh();
+}
+
+function showDecision(q){
+  $('actionPanel').style.display = 'block'; $('payArea').innerHTML = '';
+  if(q.decision === 'block'){
+    $('decision').innerHTML = `<div class="banner block">🛑 <b>Blocked by guardrails.</b> ${q.title} (${money(q.amount)}) — ${q.reason}. No PayPal order was created.</div>`;
+  } else if(q.status === 'awaiting_approval'){
+    $('decision').innerHTML = `<div class="banner ask">✋ <b>Approval needed.</b> The agent wants to buy <b>${q.title}</b> for <b>${money(q.amount)}</b>. ${q.reason}.</div>
+      <div class="row"><button class="green" id="approve">Approve</button><button class="red" id="reject">Reject</button></div>`;
+    $('approve').onclick = async () => { CURRENT = await api(`/api/requests/${q.id}/approve`, 'POST'); showDecision(CURRENT); refresh(); };
+    $('reject').onclick = async () => { await api(`/api/requests/${q.id}/reject`, 'POST'); $('decision').innerHTML = '<div class="banner block">Rejected. Nothing was charged.</div>'; refresh(); };
+  } else if(q.status === 'approved'){
+    $('decision').innerHTML = `<div class="banner ok">✅ <b>${q.title}</b> (${money(q.amount)}) is within your rules. Pay with PayPal to complete.</div>`;
+    renderPay(q);
+  } else if(q.status === 'paid'){
+    $('decision').innerHTML = `<div class="banner ok">🎉 Paid! ${q.title} — ${money(q.amount)}.</div>`;
+  }
+}
+
+function renderPay(q){
+  if(CFG.mock_paypal || !CFG.paypal_client_id){
+    $('payArea').innerHTML = '<button id="mockPay">Simulate PayPal payment (demo mode)</button>';
+    $('mockPay').onclick = async () => {
+      try { const o = await api('/api/paypal/create-order', 'POST', {request_id:q.id});
+            const c = await api('/api/paypal/capture-order', 'POST', {request_id:q.id, order_id:o.id}); showDecision(c.request);
+      } catch(e){ $('decision').innerHTML = `<div class="banner block">🛑 ${e.message}</div>`; $('payArea').innerHTML=''; }
+      refresh(); };
+    return;
+  }
+  $('payArea').innerHTML = '<div id="pp-buttons"></div>';
+  const mount = () => paypal.Buttons({
+    createOrder: () => api('/api/paypal/create-order', 'POST', {request_id:q.id}).then(o => o.id),
+    onApprove: async d => { const c = await api('/api/paypal/capture-order', 'POST', {request_id:q.id, order_id:d.orderID}); showDecision(c.request); refresh(); },
+    onError: e => { $('decision').innerHTML = `<div class="banner block">🛑 ${e.message||e}</div>`; }
+  }).render('#pp-buttons');
+  if(window.paypal){ mount(); return; }
+  const s = document.createElement('script');
+  s.src = `https://www.paypal.com/sdk/js?client-id=${CFG.paypal_client_id}&currency=USD&intent=capture`;
+  s.onload = mount; document.head.appendChild(s);
+}
+init();
+</script>
+</body>
+</html>
