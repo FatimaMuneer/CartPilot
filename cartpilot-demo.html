@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CartPilot: AI shopping agent with spending guardrails</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#f5f6fa;--card:#fff;--ink:#14213d;--mut:#5b6785;--line:#d9deea;--acc:#0070e0;--ok:#1a8f4d;--okbg:#e4f5ea;--warn:#a85f00;--warnbg:#fff1d6;--bad:#c8283b;--badbg:#fde6e9;--soft:#eef1f8}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0b1226;--card:#131c3a;--ink:#eaf0ff;--mut:#9fb0dc;--line:#26346a;--acc:#4da3ff;--ok:#3ddc84;--okbg:#10301f;--warn:#ffb84d;--warnbg:#3a2c12;--bad:#ff6b7a;--badbg:#3a1220;--soft:#0f1834}}
+:root[data-theme="dark"]{--bg:#0b1226;--card:#131c3a;--ink:#eaf0ff;--mut:#9fb0dc;--line:#26346a;--acc:#4da3ff;--ok:#3ddc84;--okbg:#10301f;--warn:#ffb84d;--warnbg:#3a2c12;--bad:#ff6b7a;--badbg:#3a1220;--soft:#0f1834}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+h1,h2{font-family:Georgia,"Times New Roman",serif;margin:0}
+header{padding:20px 24px 8px;max-width:1180px;margin:auto}
+header h1{font-size:30px;letter-spacing:-.5px}
+header p{margin:4px 0 10px;color:var(--mut)}
+.note{display:inline-block;background:var(--warnbg);color:var(--warn);border-radius:8px;padding:6px 10px;font-size:13px}
+main{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:18px;padding:12px 24px 32px;max-width:1180px;margin:auto}
+@media(max-width:860px){main{grid-template-columns:1fr}}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:18px}
+.panel h2{font-size:18px;margin-bottom:10px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+input,button{font:inherit}
+input[type=text],input[type=number]{background:var(--soft);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:9px 10px;min-width:0}
+input[type=text]{flex:1}
+button{background:var(--acc);color:#fff;border:0;border-radius:8px;padding:9px 14px;font-weight:600;cursor:pointer}
+button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line);font-weight:500;font-size:13px;padding:6px 10px}
+button.ok{background:var(--ok);color:#fff}button.no{background:var(--bad);color:#fff}
+button:focus-visible,input:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+.reply{color:var(--mut);margin:12px 0 8px;min-height:22px}
+.p{display:flex;gap:12px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px;background:var(--soft)}
+.p .e{font-size:30px}.p .i{flex:1;min-width:0}.p .t{font-weight:600}.p .d{font-size:13px;color:var(--mut)}.p .pr{font-weight:700;font-size:17px}
+.ban{border-radius:10px;padding:12px;margin-bottom:10px;border:1px solid}
+.ban.block{background:var(--badbg);border-color:var(--bad)}.ban.ask{background:var(--warnbg);border-color:var(--warn)}.ban.ok{background:var(--okbg);border-color:var(--ok)}
+.bar{height:14px;border-radius:99px;background:var(--soft);overflow:hidden;border:1px solid var(--line);margin-top:8px}
+.bar div{height:100%;background:var(--acc);transition:width .4s}
+label.f{display:block;font-size:13px;color:var(--mut);margin:10px 0 4px}
+.rules input[type=number]{width:100%}
+.cats{display:flex;flex-wrap:wrap;gap:6px}.cats label{display:flex;gap:4px;align-items:center;background:var(--soft);border:1px solid var(--line);border-radius:99px;padding:3px 9px;font-size:13px}
+table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;padding:6px 4px;border-bottom:1px solid var(--line)}
+.tag{border-radius:99px;padding:1px 8px;font-size:12px}.paid,.approved{background:var(--okbg);color:var(--ok)}.blocked,.rejected{background:var(--badbg);color:var(--bad)}.awaiting{background:var(--warnbg);color:var(--warn)}
+.log{max-height:200px;overflow:auto;font:12px/1.6 ui-monospace,Menlo,Consolas,monospace;color:var(--mut)}
+.pay{border:2px dashed var(--acc);border-radius:10px;padding:12px;margin-top:8px}
+.pay small{display:block;color:var(--mut);margin-top:6px}
+.foot{text-align:center;color:var(--mut);font-size:12px;padding:0 24px 24px}
+</style>
+</head>
+<body>
+<header>
+  <h1>CartPilot</h1>
+  <p>An AI shopping agent that can recommend, but never spend, without passing your spending rules first.</p>
+  <span class="note">Demo mode: PayPal Sandbox payments are simulated in your browser. No real money or account is involved.</span>
+</header>
+<main>
+  <div>
+    <section class="panel">
+      <h2>Ask the agent</h2>
+      <div class="row"><input type="text" id="msg" value="A gift for my dad under $50, he loves coffee" aria-label="What do you want to buy?"><button id="send">Ask</button></div>
+      <div class="row" style="margin-top:8px">
+        <button class="ghost" data-q="Wireless earbuds under $70">Earbuds under $70</button>
+        <button class="ghost" data-q="Noise-cancelling headphones">Try a risky purchase ($299)</button>
+        <button class="ghost" data-q="Yoga mat under $40">Yoga mat under $40</button>
+      </div>
+      <div class="reply" id="reply" aria-live="polite"></div>
+      <div id="cards"></div>
+    </section>
+    <section class="panel" id="actionP" hidden>
+      <h2>Guardrail decision</h2>
+      <div id="decision"></div><div id="payArea"></div>
+    </section>
+  </div>
+  <div>
+    <section class="panel"><h2>Monthly budget</h2><div id="bt"></div><div class="bar"><div id="bb" style="width:0"></div></div></section>
+    <section class="panel rules"><h2>Your spending rules</h2>
+      <label class="f" for="rb">Monthly budget ($)</label><input type="number" id="rb" min="0">
+      <label class="f" for="rm">Max per purchase ($)</label><input type="number" id="rm" min="0">
+      <label class="f" for="ra">Ask my approval above ($)</label><input type="number" id="ra" min="0">
+      <label class="f">Allowed categories</label><div class="cats" id="rc"></div>
+      <div class="row" style="margin-top:12px"><button id="saveR">Save rules</button><button class="ghost" id="reset">Reset demo</button></div>
+    </section>
+    <section class="panel"><h2>Purchase history</h2><table id="hist"></table></section>
+    <section class="panel"><h2>Audit trail</h2><div class="log" id="aud"></div></section>
+  </div>
+</main>
+<div class="foot">CartPilot built for the PayPal AI Hackathon. The full app uses the PayPal Orders API v2 (Sandbox) on a Python backend; this page runs the same guardrail logic in your browser.</div>
+<script>
+const CATS=["food","home","tech","books","fashion","toys","fitness","gifts"];
+const CAT=[
+["p01","Single-origin coffee beans 1kg",24,"food","☕","Medium roast whole beans with chocolate and citrus notes. A great gift for coffee lovers."],
+["p02","Pour-over coffee set",38.5,"home","🫖","Glass dripper, carafe and reusable filter for slow coffee at home."],
+["p03","Insulated travel mug",19.99,"home","🥤","Keeps coffee hot for 8 hours with a leak-proof lid."],
+["p04","Manual coffee grinder",45,"home","⚙️","Ceramic burr hand grinder with adjustable coarseness for coffee beans."],
+["p05","Coffee and chocolate gift box",32,"gifts","🎁","Curated coffee sampler with dark chocolate, ready to gift."],
+["p06","Bluetooth earbuds",59,"tech","🎧","Wireless earbuds with noise reduction and 24h battery."],
+["p07","Mechanical keyboard",89,"tech","⌨️","Compact 75% hot-swappable keyboard with tactile switches."],
+["p08","Noise-cancelling headphones",299,"tech","🎧","Premium over-ear headphones with active noise cancelling."],
+["p09","Paperback: Atomic Habits",14.5,"books","📘","Bestselling book on building good habits. A gift for self-improvement fans."],
+["p10","Cookbook: Salt Fat Acid Heat",28,"books","📗","Illustrated cooking book that teaches how to cook anything."],
+["p11","Yoga mat premium",34,"fitness","🧘","Non-slip 6mm mat with carrying strap."],
+["p12","Adjustable dumbbell set",149,"fitness","🏋️","Adjustable weights 2 to 20kg for home workouts."],
+["p13","Wool scarf",26,"fashion","🧣","Soft, warm winter scarf. A nice gift for dad or mom."],
+["p14","Leather wallet",42,"fashion","👛","Slim bifold wallet with RFID protection. A classic gift for dad."],
+["p15","Building blocks set 500 pcs",29,"toys","🧱","Creative building blocks for kids age 6 and up."],
+["p16","Scented candle trio",21,"gifts","🕯️","Three soy candles: vanilla, cedar and citrus."]
+].map(a=>({id:a[0],title:a[1],price:a[2],category:a[3],emoji:a[4],desc:a[5]}));
+const STOP=new Set("a an the for my me i to of and under below with he she his her loves love likes like gift buy need want find something is who dad mom birthday".split(" "));
+const KEY="cartpilot-demo-v1";
+const fresh=()=>({rules:{budget:200,max:75,appr:25,cats:CATS.slice()},reqs:[],audit:[],n:1});
+let S;
+try{S=JSON.parse(localStorage.getItem(KEY))||fresh()}catch(e){S=fresh()}
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const $m=n=>"$"+Number(n).toFixed(2);
+const log=(ev,d)=>{S.audit.unshift({t:new Date().toLocaleTimeString(),ev,d:d?JSON.stringify(d):""});S.audit=S.audit.slice(0,60);save()};
+const spent=()=>+S.reqs.filter(r=>r.status==="paid").reduce((a,r)=>a+r.amount,0).toFixed(2);
+
+function check(amount,cat){const R=S.rules;
+  if(!R.cats.includes(cat))return{d:"block",why:"The category “"+cat+"” is not allowed"};
+  if(amount>R.max)return{d:"block",why:$m(amount)+" is over your per-purchase limit of "+$m(R.max)};
+  if(spent()+amount>R.budget)return{d:"block",why:"It would exceed your monthly budget ("+$m(Math.max(R.budget-spent(),0))+" left of "+$m(R.budget)+")"};
+  if(amount>R.appr)return{d:"ask",why:$m(amount)+" is above your "+$m(R.appr)+" auto-approve threshold"};
+  return{d:"allow",why:"It is within all of your rules"}}
+
+function agent(text){
+  const m=text.toLowerCase().match(/\$\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*(?:usd|dollars)|under\s+(\d+(?:\.\d+)?)/);
+  const max=m?parseFloat(m[1]||m[2]||m[3]):null;
+  const words=(text.toLowerCase().match(/[a-z]+/g)||[]).filter(w=>!STOP.has(w));
+  const found=CAT.filter(p=>max===null||p.price<=max).map(p=>{const h=(p.title+" "+p.desc+" "+p.category).toLowerCase();
+    return{p,s:words.reduce((a,w)=>a+(h.includes(w)?(p.title.toLowerCase().includes(w)?2:1):0),0)}})
+    .filter(x=>x.s).sort((a,b)=>b.s-a.s||a.p.price-b.p.price).slice(0,3).map(x=>x.p);
+  return{max,found}}
+
+async function ask(){
+  const t=$("msg").value.trim();if(!t)return;
+  log("user_message",{text:t.slice(0,120)});
+  const r=agent(t);
+  $("cards").innerHTML="";
+  if(!r.found.length){$("reply").textContent="I could not find a match. Try describing the item or raising the budget.";render();return}
+  $("reply").textContent="Here "+(r.found.length===1?"is 1 option":"are "+r.found.length+" options")+" I found"+(r.max?" under "+$m(r.max):"")+". I can recommend, but you decide what to buy.";
+  $("cards").innerHTML=r.found.map(p=>`<div class="p"><div class="e">${p.emoji}</div><div class="i"><div class="t">${esc(p.title)}</div><div class="d">${esc(p.desc)}</div></div><div class="pr">${$m(p.price)}</div><button data-id="${p.id}">Buy</button></div>`).join("");
+  $("cards").querySelectorAll("button").forEach(b=>b.onclick=()=>buy(b.dataset.id));
+  log("agent_recommended",{ids:r.found.map(p=>p.id)});render()}
+
+function buy(id){
+  const p=CAT.find(x=>x.id===id),v=check(p.price,p.category);
+  const q={id:S.n++,pid:p.id,title:p.title,amount:p.price,category:p.category,status:v.d==="block"?"blocked":v.d==="ask"?"awaiting":"approved",why:v.why,order:null};
+  S.reqs.unshift(q);log("purchase_requested",{title:p.title,amount:p.price,decision:v.d,reason:v.why});show(q);render()}
+
+function show(q){
+  $("actionP").hidden=false;$("payArea").innerHTML="";const D=$("decision");
+  if(q.status==="blocked")D.innerHTML=`<div class="ban block"><b>Blocked by guardrails.</b> ${esc(q.title)} (${$m(q.amount)}): ${esc(q.why)}. No PayPal order was created.</div>`;
+  else if(q.status==="awaiting"){D.innerHTML=`<div class="ban ask"><b>Your approval is needed.</b> The agent wants to buy ${esc(q.title)} for ${$m(q.amount)}. ${esc(q.why)}.</div><div class="row"><button class="ok" id="ap">Approve</button><button class="no" id="rj">Reject</button></div>`;
+    $("ap").onclick=()=>{q.status="approved";log("request_approved",{id:q.id});show(q);render()};
+    $("rj").onclick=()=>{q.status="rejected";log("request_rejected",{id:q.id});D.innerHTML='<div class="ban block">Rejected. Nothing was charged.</div>';render()}}
+  else if(q.status==="approved"){D.innerHTML=`<div class="ban ok"><b>Approved.</b> ${esc(q.title)} for ${$m(q.amount)} is within your rules. Complete the payment below.</div>`;
+    $("payArea").innerHTML=`<div class="pay"><button id="pp">Pay ${$m(q.amount)} with PayPal (simulated)</button><small>Simulated PayPal Sandbox checkout: creates and captures a test order in your browser.</small></div>`;
+    $("pp").onclick=()=>pay(q)}
+  else if(q.status==="paid")D.innerHTML=`<div class="ban ok"><b>Paid.</b> ${esc(q.title)}, ${$m(q.amount)}. Order ${esc(q.order)} captured.</div>`}
+
+function pay(q){
+  const v=check(q.amount,q.category);  // re-check right before creating the order, as the real server does
+  if(v.d==="block"){q.status="blocked";q.why=v.why;log("order_refused",{id:q.id,reason:v.why});show(q);render();return}
+  q.order="SIM-ORDER-"+String(q.id).padStart(4,"0");log("paypal_order_created",{order:q.order,amount:q.amount});
+  q.status="paid";log("paypal_order_captured",{order:q.order,status:"COMPLETED"});show(q);render()}
+
+function render(){
+  const R=S.rules,sp=spent();
+  $("bt").innerHTML=`<b>${$m(sp)}</b> spent of ${$m(R.budget)}`;$("bb").style.width=Math.min(100,sp/R.budget*100||0)+"%";
+  $("hist").innerHTML="<tr><th>Item</th><th>Amount</th><th>Status</th></tr>"+(S.reqs.map(q=>`<tr><td>${esc(q.title)}</td><td>${$m(q.amount)}</td><td><span class="tag ${q.status}">${q.status==="awaiting"?"needs approval":q.status}</span></td></tr>`).join("")||'<tr><td colspan="3">Nothing yet. Ask the agent for something.</td></tr>');
+  $("aud").innerHTML=S.audit.map(a=>`${esc(a.t)} ${esc(a.ev)} ${esc(a.d)}`).join("<br>")||"No events yet."}
+
+function loadRules(){const R=S.rules;$("rb").value=R.budget;$("rm").value=R.max;$("ra").value=R.appr;
+  $("rc").innerHTML=CATS.map(c=>`<label><input type="checkbox" value="${c}" ${R.cats.includes(c)?"checked":""}> ${c}</label>`).join("")}
+$("saveR").onclick=()=>{S.rules={budget:+$("rb").value,max:+$("rm").value,appr:+$("ra").value,cats:[...document.querySelectorAll("#rc input:checked")].map(i=>i.value)};log("rules_updated",S.rules);render()};
+$("reset").onclick=()=>{S=fresh();save();loadRules();$("cards").innerHTML="";$("reply").textContent="";$("actionP").hidden=true;render()};
+$("send").onclick=ask;$("msg").onkeydown=e=>{if(e.key==="Enter")ask()};
+document.querySelectorAll(".row .ghost[data-q]").forEach(b=>b.onclick=()=>{$("msg").value=b.dataset.q;ask()});
+loadRules();render();
+</script>
+</body>
+</html>
